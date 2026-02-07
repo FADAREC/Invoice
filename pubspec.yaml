@@ -1,0 +1,38 @@
+name: invoice_app
+description: Offline-first invoicing app
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  
+  # Local database
+  sqflite: ^2.3.0
+  path: ^1.9.0
+  
+  # State management
+  riverpod: ^2.4.9
+  flutter_riverpod: ^2.4.9
+  
+  # Utilities
+  uuid: ^4.1.0
+  intl: ^0.19.0
+  
+  # Storage
+  shared_preferences: ^2.2.2
+  flutter_secure_storage: ^9.0.0
+  
+  # PDF generation
+  pdf: ^3.10.7
+  printing: ^5.11.1
+  
+  # HTTP client
+  dio: ^5.4.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
