@@ -136,7 +136,7 @@ class _PaidInvoicesTab extends ConsumerWidget {
     return invoicesAsync.when(
       data: (invoices) {
         if (invoices.isEmpty) {
-          return _EmptyState(
+          return const _EmptyState(
             icon: Icons.check_circle_outline,
             title: 'No paid invoices yet',
             subtitle: 'Paid invoices will appear here',
@@ -314,6 +314,7 @@ class _StatusBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
+        // ignore: deprecated_member_use
         color: color.withOpacity(0.1),
         borderRadius: BorderRadius.circular(4),
         border: Border.all(color: color),
