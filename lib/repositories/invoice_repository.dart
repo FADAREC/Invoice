@@ -146,6 +146,25 @@ class InvoiceRepository {
     return result.map((map) => Invoice.fromMap(map)).toList();
   }
 
+  // Get paid invoices
+  Future<List<Invoice>> getPaidInvoices({String? branchId}) async {
+    final where = branchId != null 
+        ? 'status = ? AND branch_id = ?'
+        : 'status = ?';
+    final whereArgs = branchId != null 
+        ? ['paid', branchId]
+        : ['paid'];
+
+    final result = await _db.query(
+      'invoices',
+      where: where,
+      whereArgs: whereArgs,
+      orderBy: 'paid_at DESC, created_at DESC',
+    );
+
+    return result.map((map) => Invoice.fromMap(map)).toList();
+  }
+
   // Get invoice by ID with line items
   Future<(Invoice, List<LineItem>)> getInvoiceWithItems(String invoiceId) async {
     final invoiceResult = await _db.query(

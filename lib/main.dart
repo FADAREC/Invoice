@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:invoice_app/screens/home_screen.dart';
 import 'services/device_service.dart';
 import 'database/database.dart';
 import 'repositories/branch_repository.dart';
@@ -11,7 +12,7 @@ void main() async {
   final stopwatch = Stopwatch()..start();
   
   await Future.wait([
-    // _initDatabase(),
+    _initDatabase(),
     _initDeviceId(),
   ]);
 
@@ -41,10 +42,17 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Invoice App',
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal),
         useMaterial3: true,
+        cardTheme: CardThemeData(
+          elevation: 2,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            ),
+        ),
       ),
-      home: const HomePage(),
+      home: const HomeScreen(),
+      debugShowCheckedModeBanner: false,
     );
   }
 }
