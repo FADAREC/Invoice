@@ -328,7 +328,7 @@ class _InvoiceDetailBody extends ConsumerWidget {
                   },
                 ),
                 DropdownButtonFormField<String>(
-                  value: selectedMethod,
+                  initialValue: selectedMethod,
                   decoration: const InputDecoration(labelText: 'Payment Method'),
                   items: ['Cash', 'Bank Transfer', 'Check', 'Card', 'Other']
                       .map((method) => DropdownMenuItem(

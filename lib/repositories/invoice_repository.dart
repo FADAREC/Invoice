@@ -9,6 +9,8 @@ class InvoiceRepository {
   final Database _db;
 
   InvoiceRepository(this._db);
+  
+  Database get db => _db;
 
   static Future<InvoiceRepository> create() async {
     final db = await AppDatabase.instance.database;
