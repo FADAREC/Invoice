@@ -19,10 +19,29 @@ class AppDatabase {
 
     return await openDatabase(
       path,
-      version: 1,
+      version: 3,
       onCreate: _createDB,
+      onUpgrade: _onUpgrade,
       onConfigure: _onConfigure,
     );
+  }
+
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+    }
+
+    if (oldVersion < 3) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS items (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          description TEXT,
+          default_price REAL NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        )
+      ''');
+    }
   }
 
   Future<void> _onConfigure(Database db) async {
@@ -153,8 +172,19 @@ class AppDatabase {
       )
     ''');
 
+    await db.execute('''
+      CREATE TABLE items (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT,
+        default_price REAL NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+
     // Insert default settings
-    await db.insert('settings', {'key': 'currency', 'value': 'USD'});
+    await db.insert('settings', {'key': 'currency', 'value': 'NGN'});
     await db.insert('settings', {'key': 'default_tax_rate', 'value': '0.0'});
     await db.insert('settings', {'key': 'invoice_number_format', 'value': '{branch}-{year}-{sequence}'});
   }

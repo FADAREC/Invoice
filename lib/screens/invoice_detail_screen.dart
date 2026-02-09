@@ -4,6 +4,9 @@ import 'package:intl/intl.dart';
 import '../models/invoice.dart';
 import '../models/line_item.dart';
 import '../models/customer.dart';
+import '../services/pdf_service.dart';
+// ignore: unused_import
+import '../database/database.dart';
 import '../providers/invoice_provider.dart';
 
 class InvoiceDetailScreen extends ConsumerWidget {
@@ -21,8 +24,25 @@ class InvoiceDetailScreen extends ConsumerWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.share),
-            onPressed: () {
-              // TODO: Share invoice
+            onPressed: () async {
+              final data =
+                  await ref.read(invoiceWithItemsProvider(invoiceId).future);
+              final invoice = data.$1;
+              final items = data.$2;
+
+              final customerRepo =
+                  await ref.read(customerRepositoryProvider.future);
+              final customer =
+                  await customerRepo.getCustomerById(invoice.customerId);
+
+              if (customer != null) {
+                await PdfService.shareInvoice(
+                  invoice: invoice,
+                  items: items,
+                  customer: customer,
+                  businessName: 'Your Business', // TODO: Get from settings
+                );
+              }
             },
           ),
           PopupMenuButton(
@@ -73,12 +93,12 @@ class InvoiceDetailScreen extends ConsumerWidget {
             onPressed: () async {
               final repo = await ref.read(invoiceRepositoryProvider.future);
               await repo.deleteInvoice(invoiceId);
-              
+
               if (context.mounted) {
                 Navigator.pop(context); // Close dialog
                 Navigator.pop(context); // Close detail screen
               }
-              
+
               ref.invalidate(unpaidInvoicesProvider);
               ref.invalidate(paidInvoicesProvider);
             },
@@ -126,7 +146,8 @@ class _InvoiceDetailBody extends ConsumerWidget {
                             children: [
                               Text(
                                 invoice.invoiceNumber,
-                                style: Theme.of(context).textTheme.headlineMedium,
+                                style:
+                                    Theme.of(context).textTheme.headlineMedium,
                               ),
                               const SizedBox(height: 8),
                               Text(
@@ -146,7 +167,8 @@ class _InvoiceDetailBody extends ConsumerWidget {
                               children: [
                                 Text(
                                   'Customer Details',
-                                  style: Theme.of(context).textTheme.titleMedium,
+                                  style:
+                                      Theme.of(context).textTheme.titleMedium,
                                 ),
                                 const SizedBox(height: 8),
                                 if (customer.email != null)
@@ -240,7 +262,8 @@ class _InvoiceDetailBody extends ConsumerWidget {
                               children: [
                                 Text(
                                   'Notes',
-                                  style: Theme.of(context).textTheme.titleMedium,
+                                  style:
+                                      Theme.of(context).textTheme.titleMedium,
                                 ),
                                 const SizedBox(height: 8),
                                 Text(invoice.notes!),
@@ -280,7 +303,8 @@ class _InvoiceDetailBody extends ConsumerWidget {
                         const SizedBox(width: 12),
                         Expanded(
                           child: ElevatedButton.icon(
-                            onPressed: () => _showMarkAsPaidDialog(context, ref),
+                            onPressed: () =>
+                                _showMarkAsPaidDialog(context, ref),
                             icon: const Icon(Icons.check),
                             label: const Text('Mark as Paid'),
                           ),
@@ -313,7 +337,8 @@ class _InvoiceDetailBody extends ConsumerWidget {
               children: [
                 ListTile(
                   title: const Text('Payment Date'),
-                  subtitle: Text(DateFormat('MMM d, yyyy').format(selectedDate)),
+                  subtitle:
+                      Text(DateFormat('MMM d, yyyy').format(selectedDate)),
                   trailing: const Icon(Icons.calendar_today),
                   onTap: () async {
                     final date = await showDatePicker(
@@ -329,7 +354,8 @@ class _InvoiceDetailBody extends ConsumerWidget {
                 ),
                 DropdownButtonFormField<String>(
                   initialValue: selectedMethod,
-                  decoration: const InputDecoration(labelText: 'Payment Method'),
+                  decoration:
+                      const InputDecoration(labelText: 'Payment Method'),
                   items: ['Cash', 'Bank Transfer', 'Check', 'Card', 'Other']
                       .map((method) => DropdownMenuItem(
                             value: method,
