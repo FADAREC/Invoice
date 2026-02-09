@@ -41,7 +41,7 @@ class InvoiceRepository {
     return '$prefix${sequence.toString().padLeft(4, '0')}';
   }
 
-  // Create invoice with line items (ATOMIC)
+  //Create INVOICE
   Future<Invoice> createInvoice({
     required String branchId,
     required String customerId,
@@ -54,7 +54,7 @@ class InvoiceRepository {
     final stopwatch = Stopwatch()..start();
 
     final deviceId = await DeviceService.instance.getDeviceId();
-    final invoiceId = const Uuid().v4();
+    final invoiceId = const Uuid().v4();  // Generate invoice ID first
     final now = DateTime.now();
 
     // Calculate totals
@@ -99,13 +99,23 @@ class InvoiceRepository {
     );
 
     await _db.transaction((txn) async {
-      // Insert invoice
+      // Insert invoice FIRST
       await txn.insert('invoices', invoice.toMap());
 
-      // Insert line items
+      // Insert line items with correct invoice ID
       final batch = txn.batch();
       for (var item in items) {
-        batch.insert('line_items', item.toMap());
+        // Create a new line item with the correct invoiceId
+        final lineItemWithInvoiceId = LineItem(
+          id: item.id,
+          invoiceId: invoiceId,  // Use the generated invoice ID
+          name: item.name,
+          description: item.description,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          total: item.total,
+        );
+        batch.insert('line_items', lineItemWithInvoiceId.toMap());
       }
       await batch.commit(noResult: true);
 
