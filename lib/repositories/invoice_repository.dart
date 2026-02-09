@@ -204,14 +204,37 @@ class InvoiceRepository {
   }
 
   // Mark invoice as paid
-  Future<void> markAsPaid({
+  Future<String> markAsPaid({
     required String invoiceId,
     required DateTime paymentDate,
     required String paymentMethod,
   }) async {
     final now = DateTime.now();
 
+    // Get invoice details first
+    final invoiceResult = await _db.query(
+      'invoices',
+      where: 'id = ?',
+      whereArgs: [invoiceId],
+      limit: 1,
+    );
+
+    if (invoiceResult.isEmpty) {
+      throw Exception('Invoice not found');
+    }
+
+    final invoice = Invoice.fromMap(invoiceResult.first);
+
+    if (invoice.status == InvoiceStatus.paid) {
+      throw Exception('Invoice is already paid');
+    }
+
+    // Generate receipt number
+    final receiptNumber = await _generateReceiptNumber(invoice.branchId);
+    final receiptId = const Uuid().v4();
+
     await _db.transaction((txn) async {
+      // Update invoice
       await txn.update(
         'invoices',
         {
@@ -224,7 +247,19 @@ class InvoiceRepository {
         whereArgs: [invoiceId],
       );
 
-      // Log sync event
+      // Create receipt (IMMUTABLE)
+      await txn.insert('receipts', {
+        'id': receiptId,
+        'invoice_id': invoiceId,
+        'receipt_number': receiptNumber,
+        'amount': invoice.total,
+        'payment_date': paymentDate.toIso8601String(),
+        'payment_method': paymentMethod,
+        'created_at': now.toIso8601String(),
+        'synced_at': null,
+      });
+
+      // Log sync events
       await txn.insert('sync_log', {
         'entity_type': 'invoice',
         'entity_id': invoiceId,
@@ -232,12 +267,41 @@ class InvoiceRepository {
         'sync_status': 'pending',
         'created_at': now.toIso8601String(),
       });
+
+      await txn.insert('sync_log', {
+        'entity_type': 'receipt',
+        'entity_id': receiptId,
+        'operation': 'create',
+        'sync_status': 'pending',
+        'created_at': now.toIso8601String(),
+      });
     });
+
+    return receiptNumber;
   }
 
   // Delete invoice (soft delete)
   Future<void> deleteInvoice(String invoiceId) async {
     final now = DateTime.now();
+
+    // Get invoice to check if it's paid
+    final invoiceResult = await _db.query(
+      'invoices',
+      where: 'id = ?',
+      whereArgs: [invoiceId],
+      limit: 1,
+    );
+
+    if (invoiceResult.isEmpty) {
+      throw Exception('Invoice not found');
+    }
+
+    final invoice = Invoice.fromMap(invoiceResult.first);
+
+    // CRITICAL: Prevent deleting paid invoices
+    if (invoice.status == InvoiceStatus.paid) {
+      throw Exception('Cannot delete paid invoices. This is a financial record.');
+    }
 
     await _db.transaction((txn) async {
       await txn.update(
@@ -259,5 +323,39 @@ class InvoiceRepository {
         'created_at': now.toIso8601String(),
       });
     });
+  }
+
+  //Receipt Number Generator
+  Future<String> _generateReceiptNumber(String branchId) async {
+    // Get branch code
+    final branchResult = await _db.query(
+      'branches',
+      columns: ['code'],
+      where: 'id = ?',
+      whereArgs: [branchId],
+      limit: 1,
+    );
+
+    final branchCode = branchResult.first['code'] as String;
+    final year = DateTime.now().year;
+    final prefix = 'RCT-$branchCode-$year-';
+
+    // Get max sequence for this branch+year
+    final lastReceipt = await _db.query(
+      'receipts',
+      columns: ['receipt_number'],
+      where: 'receipt_number LIKE ?',
+      whereArgs: ['$prefix%'],
+      orderBy: 'receipt_number DESC',
+      limit: 1,
+    );
+
+    int sequence = 1;
+    if (lastReceipt.isNotEmpty) {
+      final parts = (lastReceipt.first['receipt_number'] as String).split('-');
+      sequence = int.parse(parts.last) + 1;
+    }
+
+    return '$prefix${sequence.toString().padLeft(4, '0')}';
   }
 }

@@ -46,19 +46,55 @@ class InvoiceDetailScreen extends ConsumerWidget {
             },
           ),
           PopupMenuButton(
-            itemBuilder: (context) => [
-              const PopupMenuItem(
-                value: 'edit',
-                child: Text('Edit'),
-              ),
-              const PopupMenuItem(
-                value: 'delete',
-                child: Text('Delete'),
-              ),
-            ],
+            itemBuilder: (context) {
+              return invoiceAsync.when(
+                data: (data) {
+                  final invoice = data.$1;
+                  return [
+                    if (invoice.status == InvoiceStatus.unpaid)
+                      const PopupMenuItem(
+                        value: 'edit',
+                        child: Row(
+                          children: [
+                            Icon(Icons.edit, size: 18),
+                            SizedBox(width: 8),
+                            Text('Edit'),
+                          ],
+                        ),
+                      ),
+                    if (invoice.status == InvoiceStatus.unpaid)
+                      const PopupMenuItem(
+                        value: 'delete',
+                        child: Row(
+                          children: [
+                            Icon(Icons.delete, size: 18, color: Colors.red),
+                            SizedBox(width: 8),
+                            Text('Delete', style: TextStyle(color: Colors.red)),
+                          ],
+                        ),
+                      ),
+                    if (invoice.status == InvoiceStatus.paid)
+                      const PopupMenuItem(
+                        value: 'receipt',
+                        child: Row(
+                          children: [
+                            Icon(Icons.receipt_long, size: 18),
+                            SizedBox(width: 8),
+                            Text('View Receipt'),
+                          ],
+                        ),
+                      ),
+                  ];
+                },
+                loading: () => [],
+                error: (_, __) => [],
+              );
+            },
             onSelected: (value) {
               if (value == 'delete') {
                 _showDeleteConfirmation(context, ref);
+              } else if (value == 'receipt') {
+                _showReceipt(context, ref);
               }
             },
           ),
@@ -83,7 +119,9 @@ class InvoiceDetailScreen extends ConsumerWidget {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete Invoice'),
-        content: const Text('Are you sure you want to delete this invoice?'),
+        content: const Text(
+          'Are you sure you want to delete this invoice? This action cannot be undone.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -91,22 +129,115 @@ class InvoiceDetailScreen extends ConsumerWidget {
           ),
           TextButton(
             onPressed: () async {
-              final repo = await ref.read(invoiceRepositoryProvider.future);
-              await repo.deleteInvoice(invoiceId);
-
-              if (context.mounted) {
-                Navigator.pop(context); // Close dialog
-                Navigator.pop(context); // Close detail screen
+              try {
+                final repo = await ref.read(invoiceRepositoryProvider.future);
+                await repo.deleteInvoice(invoiceId);
+                
+                if (context.mounted) {
+                  Navigator.pop(context); // Close dialog
+                  Navigator.pop(context); // Close detail screen
+                }
+                
+                ref.invalidate(unpaidInvoicesProvider);
+                ref.invalidate(paidInvoicesProvider);
+              } catch (e) {
+                if (context.mounted) {
+                  Navigator.pop(context); // Close dialog
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(e.toString()),
+                      backgroundColor: Colors.red,
+                      duration: const Duration(seconds: 4),
+                    ),
+                  );
+                }
               }
-
-              ref.invalidate(unpaidInvoicesProvider);
-              ref.invalidate(paidInvoicesProvider);
             },
             child: const Text('Delete', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
     );
+  }
+  
+  void _showReceipt(BuildContext context, WidgetRef ref) async {
+    try {
+      final db = await AppDatabase.instance.database;
+      final receiptResult = await db.query(
+        'receipts',
+        where: 'invoice_id = ?',
+        whereArgs: [invoiceId],
+        limit: 1,
+      );
+
+      if (receiptResult.isEmpty) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('No receipt found for this invoice')),
+          );
+        }
+        return;
+      }
+
+      final receipt = receiptResult.first;
+
+      if (context.mounted) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Receipt'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Receipt #: ${receipt['receipt_number']}',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                Text('Amount: \$${(receipt['amount'] as num).toStringAsFixed(2)}'),
+                Text(
+                  'Payment Date: ${DateFormat('MMM d, yyyy').format(DateTime.parse(receipt['payment_date'] as String))}',
+                ),
+                Text('Method: ${receipt['payment_method']}'),
+                const SizedBox(height: 16),
+                const Text(
+                  '✓ This receipt is immutable',
+                  style: TextStyle(
+                    color: Colors.green,
+                    fontSize: 12,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Close'),
+              ),
+              ElevatedButton.icon(
+                onPressed: () {
+                  // TODO: Generate and share receipt PDF
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Receipt PDF coming in Week 3')),
+                  );
+                },
+                icon: const Icon(Icons.share),
+                label: const Text('Share Receipt'),
+              ),
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading receipt: $e')),
+        );
+      }
+    }
   }
 }
 
@@ -289,27 +420,16 @@ class _InvoiceDetailBody extends ConsumerWidget {
                         ),
                       ],
                     ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: () {
-                              // TODO: Send invoice
-                            },
-                            icon: const Icon(Icons.send),
-                            label: const Text('Send'),
-                          ),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: () => _showMarkAsPaidDialog(context, ref),
+                        icon: const Icon(Icons.check_circle),
+                        label: const Text('Mark as Paid'),
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            onPressed: () =>
-                                _showMarkAsPaidDialog(context, ref),
-                            icon: const Icon(Icons.check),
-                            label: const Text('Mark as Paid'),
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
                   ),
               ],
@@ -337,8 +457,7 @@ class _InvoiceDetailBody extends ConsumerWidget {
               children: [
                 ListTile(
                   title: const Text('Payment Date'),
-                  subtitle:
-                      Text(DateFormat('MMM d, yyyy').format(selectedDate)),
+                  subtitle: Text(DateFormat('MMM d, yyyy').format(selectedDate)),
                   trailing: const Icon(Icons.calendar_today),
                   onTap: () async {
                     final date = await showDatePicker(
@@ -353,9 +472,8 @@ class _InvoiceDetailBody extends ConsumerWidget {
                   },
                 ),
                 DropdownButtonFormField<String>(
-                  initialValue: selectedMethod,
-                  decoration:
-                      const InputDecoration(labelText: 'Payment Method'),
+                  value: selectedMethod,
+                  decoration: const InputDecoration(labelText: 'Payment Method'),
                   items: ['Cash', 'Bank Transfer', 'Check', 'Card', 'Other']
                       .map((method) => DropdownMenuItem(
                             value: method,
@@ -377,28 +495,43 @@ class _InvoiceDetailBody extends ConsumerWidget {
               ),
               ElevatedButton(
                 onPressed: () async {
-                  final repo = await ref.read(invoiceRepositoryProvider.future);
-                  await repo.markAsPaid(
-                    invoiceId: invoice.id,
-                    paymentDate: selectedDate,
-                    paymentMethod: selectedMethod,
-                  );
-
-                  if (context.mounted) {
-                    Navigator.pop(context); // Close dialog
-                    Navigator.pop(context); // Close detail screen
-                  }
-
-                  ref.invalidate(unpaidInvoicesProvider);
-                  ref.invalidate(paidInvoicesProvider);
-
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Invoice marked as paid')),
+                  try {
+                    final repo = await ref.read(invoiceRepositoryProvider.future);
+                    final receiptNumber = await repo.markAsPaid(
+                      invoiceId: invoice.id,
+                      paymentDate: selectedDate,
+                      paymentMethod: selectedMethod,
                     );
+
+                    if (context.mounted) {
+                      Navigator.pop(context); // Close dialog
+                      Navigator.pop(context); // Close detail screen
+                    }
+
+                    ref.invalidate(unpaidInvoicesProvider);
+                    ref.invalidate(paidInvoicesProvider);
+
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Invoice marked as paid\nReceipt: $receiptNumber'),
+                          duration: const Duration(seconds: 4),
+                        ),
+                      );
+                    }
+                  } catch (e) {
+                    if (context.mounted) {
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Error: ${e.toString()}'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
                   }
                 },
-                child: const Text('Confirm'),
+                child: const Text('Confirm Payment'),
               ),
             ],
           );
